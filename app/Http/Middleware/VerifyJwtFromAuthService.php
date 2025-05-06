@@ -1,10 +1,10 @@
 <?php
-
 namespace App\Http\Middleware;
 
+use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
-use Closure;
+use Illuminate\Support\Facades\Log;
 
 class VerifyJwtFromAuthService
 {
@@ -13,20 +13,49 @@ class VerifyJwtFromAuthService
         $token = $request->bearerToken();
 
         if (!$token) {
+            Log::error('Token missing in request');
             return response()->json(['error' => 'Token missing'], 401);
         }
 
-        $response = Http::withToken($token)->get('http://localhost:8000/api/users/me');
+        // Debug log untuk melihat token
+        Log::info('Verifying token with auth service', [
+            'token' => $token,
+            'auth_url' => env('AUTH_SERVICE_URL', 'http://auth-service:9000')
+        ]);
 
+        // Validasi token ke AuthService menggunakan environment variable
+        $authServiceUrl = env('AUTH_SERVICE_URL', 'http://auth-service:9000');
+        $response = Http::withToken($token)->get($authServiceUrl . '/api/users/me');
+
+        // Debug log untuk melihat response dari auth service
+        Log::info('Auth service response', [
+            'status' => $response->status(),
+            'body' => $response->json(),
+            'headers' => $response->headers()
+        ]);
 
         if (!$response->ok()) {
+            Log::error('Token validation failed', [
+                'status' => $response->status(),
+                'response' => $response->json()
+            ]);
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        $userData = $response->json()['data'] ?? null;
+        // Optional: inject user info ke request
+        $userData = $response->json();
+        
+        // Pastikan format data user sesuai
+        if (isset($userData['data'])) {
+            $userData = $userData['data'];
+        }
 
-        if (!$userData || !isset($userData['id'])) {
-            return response()->json(['error' => 'Invalid user data'], 401);
+        Log::info('User data from auth service', ['user_data' => $userData]);
+        
+        // Pastikan data user memiliki id
+        if (!isset($userData['id'])) {
+            Log::error('User ID not found in auth service response', ['user_data' => $userData]);
+            return response()->json(['error' => 'Invalid user data from auth service'], 401);
         }
 
         $request->merge(['user_data' => $userData]);
