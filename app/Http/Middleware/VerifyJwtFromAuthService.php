@@ -42,15 +42,16 @@ class VerifyJwtFromAuthService
             return response()->json(['error' => 'Unauthorized'], 401);
         }
 
-        // Optional: inject user info ke request
-        $userData = $response->json();
+        // Ambil data user dari response
+        $responseData = $response->json();
         
-        // Pastikan format data user sesuai
-        if (isset($userData['data'])) {
-            $userData = $userData['data'];
+        // Cek format response yang benar
+        if (!isset($responseData['user'])) {
+            Log::error('Invalid response format from auth service', ['response' => $responseData]);
+            return response()->json(['error' => 'Invalid response format from auth service'], 401);
         }
 
-        Log::info('User data from auth service', ['user_data' => $userData]);
+        $userData = $responseData['user'];
         
         // Pastikan data user memiliki id
         if (!isset($userData['id'])) {
